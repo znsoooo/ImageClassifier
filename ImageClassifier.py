@@ -4,7 +4,7 @@ import xpinyin
 
 
 __titie__ = 'Image Classifier'
-__ver__   = 'v0.1.0'
+__ver__   = 'v0.1.1'
 
 exts = 'bmp;gif;ico;jpe;jpeg;jpg;png'
 
@@ -47,6 +47,7 @@ class MyPanel(wx.Panel):
 
         self.parent = parent
         self.pics = []
+        self.undo = []
         self.page = 0
         self.next = 0
 
@@ -78,10 +79,12 @@ class MyPanel(wx.Panel):
     def Flip(self, n=None):
         n = n or self.next
         self.next = - (n < 0)
-        self.page = max(0, min(len(self.pics) - 1, self.page + n))
+        self.page += n
         self.Show()
 
     def Move(self, id, letter):
+        if not self.pics:
+            return
         src = self.pics.pop(id)
         dst = os.path.join(FindFolder(letter), os.path.basename(src))
         root, ext = os.path.splitext(dst)
@@ -90,10 +93,20 @@ class MyPanel(wx.Panel):
             n += 1
             dst = '%s-%d%s' % (root, n, ext)
         os.rename(src, dst)
+        self.undo.append((src, dst))
         self.Flip()
+
+    def Undo(self):
+        if not self.undo:
+            return
+        src, dst = self.undo.pop()
+        os.rename(dst, src)
+        self.pics.insert(self.page, src)
+        self.Show()
 
     def Show(self):
         if self.pics:
+            self.page = max(0, min(len(self.pics) - 1, self.page))
             path = self.pics[self.page]
             self.parent.SetTitle('(%d/%d) %s - %s %s' % (self.page + 1, len(self.pics), path, __titie__, __ver__))
             try:
@@ -124,6 +137,8 @@ class MyPanel(wx.Panel):
             self.Move(self.page, chr(id))
         elif 323 < id < 334: # num pad
             self.Move(self.page, chr(id - 276))
+        elif id in (8, 27, 127): # Backspace/Esc/Delete
+            self.Undo()
 
 
 class MyFrame(wx.Frame):
