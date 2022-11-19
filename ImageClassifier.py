@@ -1,10 +1,20 @@
+"""Usage:
+  1. Drag image folder(s) or file(s) into this window.
+  2. Press direction key to show previous or next picture.
+  3. Make classified folders in the directiory of this srcipt.
+  4. Press `A-Z` or `0-9` to move picture into folder with same prefix letter.
+  5. Click button with label to move picture into folder with same name.
+  6. Press `Backspace/Esc/Delete` to undo last move.
+  7. Pictures saved in the same directiory of this srcipt.
+"""
+
 import os
 import wx
 import xpinyin
 
 
 __titie__ = 'Image Classifier'
-__ver__   = 'v0.1.1'
+__ver__   = 'v0.1.2'
 
 exts = 'bmp;gif;ico;jpe;jpeg;jpg;png'
 
@@ -14,6 +24,8 @@ exts = ['.' + ext for ext in exts.lower().split(';')]
 
 
 def FindFolder(letter):
+    if os.path.isdir(letter):
+        return letter
     letter = letter.lower()
     names = [name for name in os.listdir() if os.path.isdir(name)]
     for name in names:
@@ -55,8 +67,13 @@ class MyPanel(wx.Panel):
         self.SetDropTarget(dt)
 
         self.bmp = wx.StaticBitmap(self)
-        box = wx.BoxSizer()
-        box.Add(self.bmp, 1, wx.EXPAND | wx.ALL)
+        self.txt = wx.StaticText(self)
+        self.dock = wx.BoxSizer()
+
+        box = wx.BoxSizer(wx.VERTICAL)
+        box.Add(self.bmp, 1, wx.EXPAND)
+        box.Add(self.txt, 1, wx.EXPAND | wx.ALL, 5)
+        box.Add(self.dock, 0, wx.EXPAND)
         self.SetSizer(box)
 
         self.Bind(wx.EVT_KEY_UP, self.OnKeyUp)
@@ -82,10 +99,10 @@ class MyPanel(wx.Panel):
         self.page += n
         self.Show()
 
-    def Move(self, id, letter):
+    def MoveTo(self, letter):
         if not self.pics:
             return
-        src = self.pics.pop(id)
+        src = self.pics.pop(self.page)
         dst = os.path.join(FindFolder(letter), os.path.basename(src))
         root, ext = os.path.splitext(dst)
         n = 1
@@ -105,10 +122,18 @@ class MyPanel(wx.Panel):
         self.Show()
 
     def Show(self):
+        for child in self.dock.GetChildren():
+            child.GetWindow().Destroy()
         if self.pics:
             self.page = max(0, min(len(self.pics) - 1, self.page))
             path = self.pics[self.page]
             self.parent.SetTitle('(%d/%d) %s - %s %s' % (self.page + 1, len(self.pics), path, __titie__, __ver__))
+            for name in os.listdir():
+                if os.path.isdir(name):
+                    btn = wx.Button(self, -1, name, size=(20, -1))
+                    btn.Bind(wx.EVT_KEY_UP, self.OnKeyUp)
+                    btn.Bind(wx.EVT_BUTTON, self.OnButton)
+                    self.dock.Add(btn, 1, wx.EXPAND)
             try:
                 img = wx.Image(path)
                 w, h = img.GetSize()
@@ -116,12 +141,22 @@ class MyPanel(wx.Panel):
                 rate = max(w / w0, h / h0)
                 self.bmp.SetBitmap(wx.Bitmap(img.Rescale(int(w / rate), int(h / rate))))
                 self.bmp.Show()
-            except wx.wxAssertionError:
+                self.txt.Hide()
+            except wx.wxAssertionError as e:
+                self.txt.SetLabel(str(e))
+                self.txt.Show()
                 self.bmp.Hide()
         else:
             self.parent.SetTitle(__titie__ + ' ' + __ver__)
+            self.txt.SetLabel(__doc__)
+            self.txt.Show()
             self.bmp.Hide()
         self.Layout()
+
+    def OnButton(self, evt):
+        btn = evt.GetEventObject()
+        name = btn.GetLabel()
+        self.MoveTo(name)
 
     def OnKeyUp(self, evt):
         id = evt.GetKeyCode()
@@ -134,9 +169,9 @@ class MyPanel(wx.Panel):
         if id in flip_map:
             self.Flip(flip_map[id])
         elif ord('A') <= id <= ord('Z') or ord('0') <= id <= ord('9'):
-            self.Move(self.page, chr(id))
+            self.MoveTo(chr(id))
         elif 323 < id < 334: # num pad
-            self.Move(self.page, chr(id - 276))
+            self.MoveTo(chr(id - 276))
         elif id in (8, 27, 127): # Backspace/Esc/Delete
             self.Undo()
 
